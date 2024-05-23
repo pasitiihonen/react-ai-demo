@@ -1,103 +1,71 @@
 import * as vscode from 'vscode';
 
-const CAT_NAMES_COMMAND_ID = 'cat.namesInEditor';
-const CAT_PARTICIPANT_ID = 'chat-sample.cat';
+const CODE_BLOCK_COMMAND_ID = 'code.blocksInEditor';
+const CODE_PARTICIPANT_ID = 'chat-sample.code';
 
-interface ICatChatResult extends vscode.ChatResult {
+interface ICodeChatResult extends vscode.ChatResult {
     metadata: {
         command: string;
     }
 }
 
-const MODEL_SELECTOR: vscode.LanguageModelChatSelector = { vendor: 'copilot', family: 'gpt-3.5-turbo' };
+const MODEL_SELECTOR: vscode.LanguageModelChatSelector = { vendor: 'copilot', family: 'gpt-4' };
+
+const instructions = `Provide answers strictly in the form of code blocks, omitting explanations unless explicitly requested or absolutely necessary for understanding the code. 
+        Focus on delivering valid and error-free solutions, and engages only with programming-related questions, asking for clarifications if the input is unclear.
+        Do not say anything that is not code, and avoid using comments in the code blocks.`
 
 export function activate(context: vscode.ExtensionContext) {
 
-    // Define a Cat chat handler. 
-    const handler: vscode.ChatRequestHandler = async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<ICatChatResult> => {
+    // Define a Code chat handler. 
+    const handler: vscode.ChatRequestHandler = async (request: vscode.ChatRequest, context: vscode.ChatContext, stream: vscode.ChatResponseStream, token: vscode.CancellationToken): Promise<ICodeChatResult> => {
         // To talk to an LLM in your subcommand handler implementation, your
         // extension can use VS Code's `requestChatAccess` API to access the Copilot API.
         // The GitHub Copilot Chat extension implements this provider.
-        if (request.command == 'teach') {
-            stream.progress('Picking the right topic to teach...');
-            const topic = getTopic(context.history);
-            const messages = [
-                vscode.LanguageModelChatMessage.User('You are a cat! Your job is to explain computer science concepts in the funny manner of a cat. Always start your response by stating what concept you are explaining. Always include code samples.'),
-                vscode.LanguageModelChatMessage.User(topic)
-            ];
-            const [model] = await vscode.lm.selectChatModels(MODEL_SELECTOR);
-            const chatResponse = await model.sendRequest(messages, {}, token);
-            for await (const fragment of chatResponse.text) {
-                stream.markdown(fragment);
-            }
-
-            stream.button({
-                command: CAT_NAMES_COMMAND_ID,
-                title: vscode.l10n.t('Use Cat Names in Editor')
-            });
-
-            return { metadata: { command: 'teach' } };
-        } else if (request.command == 'play') {
-            stream.progress('Throwing away the computer science books and preparing to play with some Python code...');
-            const messages = [
-                vscode.LanguageModelChatMessage.User('You are a cat! Reply in the voice of a cat, using cat analogies when appropriate. Be concise to prepare for cat play time.'),
-                vscode.LanguageModelChatMessage.User('Give a small random python code samples (that have cat names for variables). ' + request.prompt)
-            ];
-            const [model] = await vscode.lm.selectChatModels(MODEL_SELECTOR);
-            const chatResponse = await model.sendRequest(messages, {}, token);
-            for await (const fragment of chatResponse.text) {
-                stream.markdown(fragment);
-            }
-            return { metadata: { command: 'play' } };
-        } else {
-            const messages = [
-                vscode.LanguageModelChatMessage.User(`You are a cat! Think carefully and step by step like a cat would.
-                    Your job is to explain computer science concepts in the funny manner of a cat, using cat metaphors. Always start your response by stating what concept you are explaining. Always include code samples.`),
-                vscode.LanguageModelChatMessage.User(request.prompt)
-            ];
-            const [model] = await vscode.lm.selectChatModels(MODEL_SELECTOR);
-            const chatResponse = await model.sendRequest(messages, {}, token);
-            for await (const fragment of chatResponse.text) {
-                // Process the output from the language model
-                // Replace all python function definitions with cat sounds to make the user stop looking at the code and start playing with the cat
-                const catFragment = fragment.replaceAll('def', 'meow');
-                stream.markdown(catFragment);
-            }
-
-            return { metadata: { command: '' } };
+        stream.progress('Processing your request...');
+        
+        const messages = [
+            vscode.LanguageModelChatMessage.User(instructions),
+            vscode.LanguageModelChatMessage.User(request.prompt)
+        ];
+        const [model] = await vscode.lm.selectChatModels(MODEL_SELECTOR);
+        const chatResponse = await model.sendRequest(messages, {}, token);
+        for await (const fragment of chatResponse.text) {
+            stream.markdown(fragment);
         }
+
+        return { metadata: { command: '' } };
     };
 
     // Chat participants appear as top-level options in the chat input
     // when you type `@`, and can contribute sub-commands in the chat input
     // that appear when you type `/`.
-    const cat = vscode.chat.createChatParticipant(CAT_PARTICIPANT_ID, handler);
-    cat.iconPath = vscode.Uri.joinPath(context.extensionUri, 'cat.jpeg');
-    cat.followupProvider = {
-        provideFollowups(result: ICatChatResult, context: vscode.ChatContext, token: vscode.CancellationToken) {
+    const code = vscode.chat.createChatParticipant(CODE_PARTICIPANT_ID, handler);
+    code.iconPath = vscode.Uri.joinPath(context.extensionUri, 'code_icon.png'); // Update with an appropriate icon path
+    code.followupProvider = {
+        provideFollowups(result: ICodeChatResult, context: vscode.ChatContext, token: vscode.CancellationToken) {
             return [{
-                prompt: 'let us play',
-                label: vscode.l10n.t('Play with the cat'),
-                command: 'play'
+                prompt: 'Show more examples',
+                label: vscode.l10n.t('Show more examples'),
+                command: 'example'
             } satisfies vscode.ChatFollowup];
         }
     };
 
     context.subscriptions.push(
-        cat,
-        // Register the command handler for the /meow followup
-        vscode.commands.registerTextEditorCommand(CAT_NAMES_COMMAND_ID, async (textEditor: vscode.TextEditor) => {
-            // Replace all variables in active editor with cat names and words
+        code,
+        // Register the command handler for the /code followup
+        vscode.commands.registerTextEditorCommand(CODE_BLOCK_COMMAND_ID, async (textEditor: vscode.TextEditor) => {
+            // Replace all content in the active editor with code blocks from the response
             const text = textEditor.document.getText();
             const messages = [
-                vscode.LanguageModelChatMessage.User(`You are a cat! Think carefully and step by step like a cat would.
-                Your job is to replace all variable names in the following code with funny cat variable names. Be creative. IMPORTANT respond just with code. Do not use markdown!`),
-                vscode.LanguageModelChatMessage.User(text)
+            vscode.LanguageModelChatMessage.User(instructions),
+            vscode.LanguageModelChatMessage.User(text)
             ];
 
             let chatResponse: vscode.LanguageModelChatResponse | undefined;
             try {
-                const [model] = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-3.5-turbo' });
+                const [model] = await vscode.lm.selectChatModels({ vendor: 'copilot', family: 'gpt-4' });
                 chatResponse = await model.sendRequest(messages, {}, new vscode.CancellationTokenSource().token);
 
             } catch (err) {
@@ -124,7 +92,7 @@ export function activate(context: vscode.ExtensionContext) {
                     await textEditor.edit(edit => {
                         const lastLine = textEditor.document.lineAt(textEditor.document.lineCount - 1);
                         const position = new vscode.Position(lastLine.lineNumber, lastLine.text.length);
-                        edit.insert(position, fragment);
+                        edit.insert(position, `\n\`\`\`\n${fragment}\n\`\`\`\n`);
                     });
                 }
             } catch (err) {
@@ -137,25 +105,6 @@ export function activate(context: vscode.ExtensionContext) {
             }
         }),
     );
-}
-
-// Get a random topic that the cat has not taught in the chat history yet
-function getTopic(history: ReadonlyArray<vscode.ChatRequestTurn | vscode.ChatResponseTurn>): string {
-    const topics = ['linked list', 'recursion', 'stack', 'queue', 'pointers'];
-    // Filter the chat history to get only the responses from the cat
-    const previousCatResponses = history.filter(h => {
-        return h instanceof vscode.ChatResponseTurn && h.participant == CAT_PARTICIPANT_ID
-    }) as vscode.ChatResponseTurn[];
-    // Filter the topics to get only the topics that have not been taught by the cat yet
-    const topicsNoRepetition = topics.filter(topic => {
-        return !previousCatResponses.some(catResponse => {
-            return catResponse.response.some(r => {
-                return r instanceof vscode.ChatResponseMarkdownPart && r.value.value.includes(topic)
-            });
-        });
-    });
-
-    return topicsNoRepetition[Math.floor(Math.random() * topicsNoRepetition.length)] || 'I have taught you everything I know. Meow!';
 }
 
 export function deactivate() { }

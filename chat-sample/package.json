@@ -24,27 +24,23 @@
     "contributes": {
         "chatParticipants": [
             {
-				"id": "chat-sample.cat",
-				"fullName": "Cat",
-                "name": "cat",
-                "description": "Meow! What can I teach you?",
+                "id": "chat-sample.code",
+                "fullName": "Code Assistant",
+                "name": "code",
+                "description": "Ask me anything, and I will respond in code blocks.",
                 "isSticky": true,
                 "commands": [
                     {
-                        "name": "teach",
-                        "description": "Pick at random a computer science concept then explain it in purfect way of a cat"
-                    },
-                    {
-                        "name": "play",
-                        "description": "Do whatever you want, you are a cat after all"
+                        "name": "example",
+                        "description": "Provide more code examples"
                     }
                 ]
             }
         ],
         "commands": [
             {
-                "command": "cat.namesInEditor",
-                "title": "Use Cat Names in Editor"
+                "command": "code.blocksInEditor",
+                "title": "Insert Code Blocks"
             }
         ]
     },
